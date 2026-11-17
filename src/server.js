@@ -153,19 +153,31 @@ app.get("/health", (req, res) => {
     status: "online"
   });
 });
-
+let activeGenerations = 0;
+const MAX_CONCURRENT_GENERATIONS = 2;
 // API de génération IA
+
 app.post("/v1/generate", authenticate, async (req, res) => {
+  const prompt = req.body.prompt;
+
+  if (!prompt || typeof prompt !== "string") {
+    return res.status(400).json({
+      success: false,
+      error: "Prompt required"
+    });
+  }
+
+  if (activeGenerations >= MAX_CONCURRENT_GENERATIONS) {
+    return res.status(503).json({
+      success: false,
+      error: "Server busy",
+      message: "Please retry shortly."
+    });
+  }
+
+  activeGenerations++;
+
   try {
-    const prompt = req.body.prompt;
-
-    if (!prompt || typeof prompt !== "string") {
-      return res.status(400).json({
-        success: false,
-        error: "Prompt required"
-      });
-    }
-
     const output = await generateWithFallback(prompt);
 
     res.json({
@@ -186,8 +198,12 @@ app.post("/v1/generate", authenticate, async (req, res) => {
       error: "AI generation unavailable",
       message: "Please try again later."
     });
+
+  } finally {
+    activeGenerations--;
   }
 });
+
 
 // Démarrage
 app.listen(PORT, "0.0.0.0", () => {
